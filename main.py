@@ -1,61 +1,132 @@
 import os
+import argparse
 import spacy
 import pickle
 from whatlies import EmbeddingSet
 from whatlies.language import SpacyLanguage
 from whatlies.transformers import Pca,Umap
+from nltk.stem.snowball import SnowballStemmer
 import csv
-import time
 
-start = time.time()
-nlp = spacy.load('en_core_web_lg')
-print("load model ",(time.time()-start))
-lang = SpacyLanguage("en_core_web_lg")
-print("load model ",(time.time()-start))
 
-savefile='words.pkl'
+class Alca():
+    def __init__(self,args):
+        self.model = args.model
+        self.savefile = f"{args.model}_{args.stem}_{args.savefile}"
+        self.sourcefile = args.sourcefile
+        self.outfile = f"{args.model}_{args.stem}_{args.outfile}"
+        self.stem = args.stem
+        self.x = args.x
+        self.y = args.y
+        self.words = set()
+        self.nlp = self.load_model()
+        self.lang = self.load_whatlies_model()
+        self.stemmer = SnowballStemmer("english")
+        self.graphs = None
 
-def gen_words():
-    if os.path.exists(savefile):
-        with open(savefile, 'rb') as pfile:
-            words = pickle.load(pfile)
-            return words
-    words = set()
-    count = 0
-    with open('Shakespeare_data.csv') as csvfile:
-        next(csvfile)
-        reader = csv.reader(csvfile)
-        for row in reader:
+    def load_model(self):
+        return spacy.load(self.model)
+    def load_whatlies_model(self):
+        return SpacyLanguage(self.model)
+
+    def wordstem(self,word):
+        return self.stemmer.stem(word)
+
+    def tokenize_line(self,line):
+        tokens = (self.nlp(line.lower()))
+        for token in tokens:
+            word = token.text
+            if self.stem:
+                word = self.wordstem(word)
+            if word not in self.words and len(word) > 2:
+                self.words.add(word)
+
+    def gen_words(self):
+        if self.savefile and os.path.exists(self.savefile):
+            with open(self.savefile, 'rb') as pfile:
+                self.words = pickle.load(pfile)
+                print("Loaded saved words")
+                return
+
+        if not os.path.exists(self.sourcefile):
+            raise Exception("can't find sourcefile")
+
+        print("Generating words")
+        with open(self.sourcefile) as csvfile:
+            next(csvfile)
+            reader = csv.reader(csvfile)
+            for row in reader:
+                try:
+                    self.tokenize_line(row[5])
+                except Exception as e:
+                    raise e
+        if len(self.words):
+            with open(self.savefile,'wb') as pfile:
+                pickle.dump(self.words,pfile)
+        else:
+            raise Exception("no words found")
+
+    def make_embeddings(self):
+        embfile = 'emb_'+self.savefile
+        if os.path.exists(embfile):
             try:
-                tokens = (nlp(row[5].lower()))
-                start = time.time()
-                for token in tokens:
-                    if token.text not in words:
-                        words.add(token.text)
-                        count += 1
-                        if False and count > 10:
-                            return words
+                with open(embfile,'rb') as pfile:
+                    self.emb = pickle.load(pfile)
+                    return
             except Exception as e:
                 pass
-    with open(savefile,'wb') as pfile:
-        pickle.dump(words,file)
-    return words
-        
-start = time.time()
-words = gen_words()
-print("gen_words  ",(time.time()-start))
-start = time.time()
-emb = EmbeddingSet(*[lang[word] for word in words])
-print("embeddings ",(time.time()-start))
-start = time.time()
-pca_plot = emb.transform(Pca(2)).plot_interactive()
-print("plot pca   ",(time.time()-start))
-start = time.time()
-umap_plot = emb.transform(Umap(2)).plot_interactive()
-print("plot umap  ",(time.time()-start))
-start = time.time()
+        print("Generating embeddings")
+        self.emb = EmbeddingSet(*[self.lang[word] for word in self.words])
+        with open(embfile,'wb') as pfile:
+            pickle.dump(self.emb,pfile)
 
-plots = pca_plot | umap_plot
 
-plots.save('sp.html')
-print("save plots ",(time.time()-start))
+    def add_graph(self,graph):
+        if not self.graphs:
+            self.graphs = graph
+        else:
+            self.graphs |= graph
+
+    def make_pca(self):
+        print("making pca")
+        self.add_graph(self.emb.transform(Pca(2)).plot_interactive())
+
+    def make_umap(self):
+        print("making umap")
+        self.add_graph(self.emb.transform(Umap(2)).plot_interactive())
+
+    def plot_axes(self):
+        print(f"plotting axes {self.x},{self.y}")
+        self.add_graph(self.emb.plot_interactive(x_axis=self.x,y_axis=self.y))
+
+    def plot_matrix(self):
+        print("plotting matrix")
+        self.add_graph(self.emb.plot_interactive_matrix(0,1,2))
+
+    def plot(self):
+        self.graphs.save(self.outfile)
+        print(f"Saved {self.outfile}")
+
+if __name__  == '__main__':
+    parser = argparse.ArgumentParser(description='Process command line arguments.')
+    parser.add_argument('--model', type=str,default='en_core_web_lg',help='model')
+    parser.add_argument('--savefile', type=str,default='words.pkl',help='')
+    parser.add_argument('--sourcefile', type=str,default='Shakespeare_data.csv',help='')
+    parser.add_argument('--outfile', type=str,default='sp.html',help='')
+    parser.add_argument('--stem', action='store_true',help='')
+    parser.add_argument('--force', action='store_true',help='')
+    parser.add_argument('--x', type=str)
+    parser.add_argument('--y', type=str)
+    parser.add_argument('--matrix',action='store_true')
+    args = parser.parse_args()
+
+    alca = Alca(args)
+    alca.gen_words()
+    alca.make_embeddings()
+    if args.x and args.y:
+        alca.plot_axes()
+    elif args.matrix:
+        alca.plot_matrix()
+    else:
+        alca.make_umap()
+    alca.plot()
