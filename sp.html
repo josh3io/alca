@@ -1,0 +1,59 @@
+<html>
+<head>
+  <style>
+    #vis.vega-embed {
+      width: 100%;
+      display: flex;
+    }
+
+    #vis.vega-embed details,
+    #vis.vega-embed details summary {
+      position: relative;
+    }
+  </style>
+  <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/vega@5"></script>
+  <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/vega-lite@5.14.1"></script>
+  <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/vega-embed@6"></script>
+</head>
+<body>
+  <h2>Description</h2>
+  <p>Umap plot of Shakespeare text</p>
+  <h2>Method</h2>
+  <p>
+    <ul>
+      <li>Text was gathered from kaggle dataset <a href='https://www.kaggle.com/datasets/kingburrito666/shakespeare-plays'>https://www.kaggle.com/datasets/kingburrito666/shakespeare-plays</a></li>
+      <li>Spacy en_core_web_lg model was used for tokenization and embeddings</li>
+      <li>Text was tokenized and cleaned for stopwords and symbols in the text</li>
+      <li>Embeddings were generated and plotted with <a href='https://spacy.io/universe/project/whatlies/'>whatlies</a> library</li>
+    </ul>
+  </p>
+  <h2>Results</h2>
+  <p>
+    Two main correlations are found, separating modern words from more antiquated words. 
+    <br>
+    Modern examples: languish, dower, leper, etc.
+    <br>
+    Antiquated examples: inheritrix, sleepest, shoon, thisn, etc.
+    <br>
+    The selected model could be used to target words that need more explanation for modern readers and performers.
+    <br><br>
+    One major outlier group was found, which seems to be composed of words ending in an apostrophe. 
+    e.g. howso', whene', howsome', howe', etc.
+    <br>This seems to be a result of an issue during stemming or tokenization, as it seems these should be contractions of [word] and 'ever.'
+    <br>Regardless, that these are outliers from other contractions is notable.
+    <br><br>
+    Other notable groupings:
+    <ul>
+      <li>ordinal numbers</li>
+      <li>French words</li>
+      <li>animals</li>
+      <li>familial words (mother,father, etc.)</li>
+      <li>ordinal directions</li>
+      <li>-ion and -ment suffix words</li>
+    </ul>
+
+  </p>
+  <div id="vis"></div>
+  <script type='text/javascript' src='output/sp.js'></script>
+</body>
+</html>
