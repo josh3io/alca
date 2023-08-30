@@ -2,7 +2,8 @@ import os
 import argparse
 import spacy
 import pickle
-from whatlies import EmbeddingSet
+from whatlies.embeddingset import EmbeddingSet
+from whatlies.embedding import Embedding
 from whatlies.language import SpacyLanguage
 from whatlies.transformers import Pca,Umap
 from nltk.stem.snowball import SnowballStemmer
@@ -11,23 +12,36 @@ import csv
 
 class Alca():
     def __init__(self,args):
+        self.args = args
         self.model = args.model
-        self.savefile = f"{args.model}_{args.stem}_{args.savefile}"
+        self.play = args.play
         self.sourcefile = args.sourcefile
-        self.outfile = f"{args.model}_{args.stem}_{args.outfile}"
         self.stem = args.stem
         self.x = args.x
         self.y = args.y
         self.words = set()
-        self.nlp = self.load_model()
-        self.lang = self.load_whatlies_model()
-        self.stemmer = SnowballStemmer("english")
+        self.embeddings = []
         self.graphs = None
+
+        self.savefile = self.file_prefix() + args.savefile
+        if self.play:
+            self.savefile = f"{self.play}_{self.savefile}"
+
+        self.outfile = self.file_prefix([self.play,args.x,args.y]) + args.outfile
+
+        self.nlp = self.load_model()
+        self.stemmer = SnowballStemmer("english")
+
+    def file_prefix(self,parts=[]):
+        parts += [
+            self.args.model,
+            self.args.stem,
+            self.args.play,
+        ]
+        return '_'.join([str(x) for x in parts]) + '_'
 
     def load_model(self):
         return spacy.load(self.model)
-    def load_whatlies_model(self):
-        return SpacyLanguage(self.model)
 
     def wordstem(self,word):
         return self.stemmer.stem(word)
@@ -36,10 +50,11 @@ class Alca():
         tokens = (self.nlp(line.lower()))
         for token in tokens:
             word = token.text
-            if self.stem:
-                word = self.wordstem(word)
-            if word not in self.words and len(word) > 2:
-                self.words.add(word)
+            if '--' not in word:
+                if self.stem:
+                    word = self.wordstem(word)
+                if word not in self.words and len(word) > 2:
+                    self.words.add(word)
 
     def gen_words(self):
         if self.savefile and os.path.exists(self.savefile):
@@ -56,10 +71,11 @@ class Alca():
             next(csvfile)
             reader = csv.reader(csvfile)
             for row in reader:
-                try:
-                    self.tokenize_line(row[5])
-                except Exception as e:
-                    raise e
+                if not self.play or (self.play and row[1] == self.play):
+                    try:
+                        self.tokenize_line(row[5])
+                    except Exception as e:
+                        raise e
         if len(self.words):
             with open(self.savefile,'wb') as pfile:
                 pickle.dump(self.words,pfile)
@@ -76,7 +92,8 @@ class Alca():
             except Exception as e:
                 pass
         print("Generating embeddings")
-        self.emb = EmbeddingSet(*[self.lang[word] for word in self.words])
+        #self.emb = EmbeddingSet(*[self.nlp[word] for word in self.words])
+        self.emb = EmbeddingSet({t.text: Embedding(t.text, t.vector) for t in self.nlp.pipe(self.words)})
         with open(embfile,'wb') as pfile:
             pickle.dump(self.emb,pfile)
 
@@ -104,7 +121,7 @@ class Alca():
         self.add_graph(self.emb.plot_interactive_matrix(0,1,2))
 
     def plot(self):
-        self.graphs.save(self.outfile)
+        self.graphs.save('output/'+self.outfile)
         print(f"Saved {self.outfile}")
 
 if __name__  == '__main__':
@@ -118,6 +135,7 @@ if __name__  == '__main__':
     parser.add_argument('--x', type=str)
     parser.add_argument('--y', type=str)
     parser.add_argument('--matrix',action='store_true')
+    parser.add_argument('--play', type=str)
     args = parser.parse_args()
 
     alca = Alca(args)
